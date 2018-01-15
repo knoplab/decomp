@@ -10,7 +10,7 @@ type
     length*: cint
     elements*: cint
     ident*: cstring
-    sons*: ptr SlotType
+    sons*: ptr ptr SlotType
   SlotDescriptor* = object
     name*: cstring
     typ*: ptr SlotType
@@ -36,7 +36,7 @@ proc dispose*(typ: ptr SlotType) =
     var sonIndex: cint = 0
     while sonIndex < typ.length:
       dispose(
-        cast[ptr SlotType](cast[int](typ.sons) + sonIndex * sizeof(SlotType)))
+        cast[ptr ptr SlotType](cast[int](typ.sons) + sonIndex * sizeof(pointer))[])
       inc(sonIndex)
   cfree(typ)
 
@@ -44,8 +44,10 @@ proc add*(typ: ptr SlotType; toAdd: ptr SlotType) =
   ## Adds a son to a given ``SlotType``.
   inc(typ.length, 1)
   typ.sons =
-    cast[ptr SlotType](
-      crealloc(typ.sons, cuint typ.length * sizeof(SlotType)))
+    cast[ptr ptr SlotType](
+      crealloc(typ.sons, cuint typ.length * sizeof(pointer)))
+  cast[ptr ptr SlotType](
+    cast[int](typ.sons) + (typ.length - 1) * sizeof(pointer))[] = toAdd
 
 proc newPointer*(memoryType: ptr SlotType): ptr SlotType =
   ## Creates a new ``SlotType`` representing a pointer.
@@ -66,6 +68,16 @@ proc newObject*(types: varargs[ptr SlotType]): ptr SlotType =
   for elem in types:
     result.add elem
 
+proc copy*(typ: ptr SlotType): ptr SlotType =
+  ## Performs a deep copy of a ``SlotType``.
+  result = newSlotType(typ.kind)
+  result.length = 0
+  result.elements = typ.elements
+  result.ident = typ.ident
+  for idx in 0 ..< typ.length:
+    result.add copy(
+      cast[ptr ptr SlotType](cast[int](typ.sons) + idx * sizeof(pointer))[])
+
 proc `~==`*(typ1: ptr SlotType; typ2: ptr SlotType): bool =
   ## Checks two ``SlotType``s for equality.
   if typ1.kind != typ2.kind: return false
@@ -73,8 +85,8 @@ proc `~==`*(typ1: ptr SlotType; typ2: ptr SlotType): bool =
   if typ1.length != 0:
     var sonIndex: cint = 0
     while sonIndex < typ1.length:
-      if not(cast[ptr SlotType](cast[int](typ1.sons) + sonIndex * sizeof(SlotType)) ~==
-         cast[ptr SlotType](cast[int](typ2.sons) + sonIndex * sizeof(SlotType))):
+      if not(cast[ptr ptr SlotType](cast[int](typ1.sons) + sonIndex * sizeof(ptr SlotType))[] ~==
+         cast[ptr ptr SlotType](cast[int](typ2.sons) + sonIndex * sizeof(ptr SlotType))[]):
         return false
       inc(sonIndex)
   return true
