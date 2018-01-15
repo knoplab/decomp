@@ -40,7 +40,7 @@ typedef struct SlotType {
   int length;
   int elements;
   const char *ident;
-  SlotType *sons;
+  SlotType **sons;
 } SlotType;
 
 // Type descriptor for a single slot of a plugin component.
@@ -86,7 +86,7 @@ SlotType *newSlotType(TypeKind kind) {
 void slotType_dispose(SlotType *typ) {
   if (typ->length) {
     for (int sonIndex = 0; sonIndex < typ->length; ++sonIndex)
-      slotType_dispose(&typ->sons[sonIndex]);
+      slotType_dispose(typ->sons[sonIndex]);
   }
   free(typ);
 }
@@ -94,7 +94,7 @@ void slotType_dispose(SlotType *typ) {
 // Adds a son to a given SlotType.
 void slotType_add(SlotType *typ, SlotType *toAdd) {
   typ->length += 1;
-  typ->sons = (SlotType *)realloc(typ->sons, typ->length * sizeof(SlotType));
+  typ->sons = (SlotType **)realloc(typ->sons, typ->length * sizeof(SlotType *));
 }
 
 // Creates a new SlotType representing a pointer type.
@@ -128,6 +128,17 @@ SlotType *slotType_newObject(SlotType *first, ...) {
   return result;
 }
 
+// Perform a deep copy of a SlotType.
+SlotType *slotType_copy(SlotType *typ) {
+  SlotType *result = newSlotType(typ->kind);
+  result->length = 0;
+  result->ident = typ->ident;
+  result->elements = typ->elements;
+  for (int sonIndex = 0; sonIndex < typ->length; ++sonIndex)
+    slotType_add(result, slotType_copy(typ->sons[sonIndex]));
+  return result;
+}
+
 // Checks the equality of two SlotTypes.
 int slotType_isEqual(SlotType *typ1, SlotType *typ2) {
   if (typ1->kind != typ2->kind)
@@ -136,7 +147,7 @@ int slotType_isEqual(SlotType *typ1, SlotType *typ2) {
     return false;
   if (typ1->length != 0) {
     for (int sonIndex = 0; sonIndex < typ1->length; ++sonIndex) {
-      if (!slotType_isEqual(&typ1->sons[sonIndex], &typ2->sons[sonIndex]))
+      if (!slotType_isEqual(typ1->sons[sonIndex], typ2->sons[sonIndex]))
         return false;
     }
   }
